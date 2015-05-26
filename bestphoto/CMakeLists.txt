@@ -1,6 +1,0 @@
-cmake_minimum_required(VERSION 2.8)
-project( ImageEnhancment )
-find_package( OpenCV )
-include_directories( ${OpenCV_INCLUDE_DIRS} )
-add_executable( ImageEnhancment ImageEnhancment.cpp )
-target_link_libraries( ImageEnhancment ${OpenCV_LIBS} )
