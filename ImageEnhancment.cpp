@@ -1,6 +1,5 @@
 
-
-//
+//Sami Dalati
 //to compile run /Applications/CMake.app/Contents/bin/cmake . to make the make file
 
 #include "opencv2/imgproc/imgproc.hpp"
@@ -343,8 +342,10 @@ int ContoursCnt(Mat frame, int fr_num, int displayContour = 0)
             drawContours( drawing, contours, i, color, 2, 8, hierarchy, 0, Point() );
         }     
         char buffer [50];
-        sprintf (buffer, "resut %d", fr_num);
+        sprintf (buffer, "ContoursCnt %d.tiff", fr_num);
         imshow( buffer, drawing );
+        imwrite(buffer, drawing);
+
         //**********************************************************************
     }
    
@@ -355,20 +356,27 @@ int main(int argc, char** argv)
 {
 
     const int numOfFrame = 10;
-    Mat frame;
+    Mat frame, prev_frame;
+    int startFrame = 175;
     int currentContourSize = 0;
     int lastContourSize = 0;
     int bestFrameNum = 0;
     char* window[numOfFrame];
     //int fr_num = 0;
 
-    for(int fr_num=1;fr_num<numOfFrame;fr_num++)//looping through frames, the frames were extracted from the video using ffmpeg
-        //ffmpeg -i input.flv -vf fps=30 out%d.png
+    prev_frame = Mat::zeros(1, 1, CV_64F);//not sure about Mat type?
+
+    for(int fr_num=startFrame;fr_num<numOfFrame+startFrame;fr_num++)//looping through frames, the frames were extracted from the video using ffmpeg
+        //ffmpeg -i Cisfinal5-2.m4v -vf fps=30 out%d.png
+        //ffmpeg -i Cisfinal5-2.m4v -pix_fmt yuv420p -vframes 30 out%d.png //does not work
+        //ffmpeg -i Cisfinal5-2.m4v -bsf:v mjpeg2jpeg out%d.jpg//still encoded
     {   
         char buffer [50];
         sprintf (buffer, "video/out%d.png", fr_num);
-        window[fr_num] = buffer;
+        window[fr_num-startFrame] = buffer;
         frame = imread(buffer, CV_LOAD_IMAGE_COLOR);   // Read the file
+        //if(countNonZero(prev_frame) < 1)
+         //   prev_frame = frame;
 
         if(! frame.data )                              // Check for invalid input
         {
@@ -376,18 +384,43 @@ int main(int argc, char** argv)
             return -1;
         }
 
-        namedWindow( window[fr_num], WINDOW_AUTOSIZE );// Create a window for display.
-        imshow( window[fr_num], frame ); 
+        sprintf (buffer, "Original %d.tiff", fr_num);
+        namedWindow( window[fr_num-startFrame], WINDOW_AUTOSIZE );// Create a window for display.
+        imshow( window[fr_num-startFrame], frame ); 
+        imwrite(buffer, frame);
 
-        currentContourSize = ContoursCnt(frame, fr_num, 1);
-        cout<<"frame "<<fr_num<<" # of contours: "<<currentContourSize<<endl;
+
+        /*********************************************************/ //this block is used for contours counting
+        currentContourSize = ContoursCnt(frame, fr_num, 1); //find best frame based on contour counting
+        cout<<"frame "<<fr_num<<" # of contours: "<<currentContourSize;
         
         if(currentContourSize > lastContourSize)
         {
             bestFrameNum = fr_num;
             lastContourSize = currentContourSize;
         }
-  
+        /*********************************************************/
+
+
+        Mat diff = frame - prev_frame; //take frame diff
+        sprintf (buffer, "Diff %d.tiff", fr_num);
+        namedWindow( buffer, WINDOW_AUTOSIZE );// Create a window for display.
+        imshow( buffer, diff); 
+        imwrite(buffer, diff);
+
+        Scalar mean;
+        Scalar stddev;
+
+        meanStdDev ( diff, mean, stddev ); //compute mean and std div 
+
+        cout<<" mean: "<<mean.val[0]<<" STDdiv: "<<stddev.val[0]<<endl; //display the mean and std div for the first channel, note that the values for all channels were simialr
+
+        /*********************************************************/
+        //cout<<" norm: "<<norm(frame, prev_frame, NORM_L2)<<endl;
+
+        prev_frame = frame;
+
+
     }
     
     cout<<"best frame: "<<bestFrameNum<<endl;
@@ -396,16 +429,86 @@ int main(int argc, char** argv)
     return 0;
 }
 
-
-//engineering a video to introduce motion blur every nth frame
-
+/*
 //canny: any recommendations about the threshold value?
 //canny: best kernel size (3)?
-
+//check if doing seprably, then it does not matter,
+//otherwise, the bigger the better
 
  
 //2nd: difference of the frames, build edge map of the difference 
 //start with a clear vifdeo, fake some motino blur.
 //do frames instead of video.
 
+
+Prev Finding:
+Contour counting works great for motion blur (software added  using CC) but it performed pretty bad when trying to detect best frame
+that have digital noise distortion, this kind of distortion added blocks of pixelation that add edges, thus 
+the contour count is higher for worst frames.
+
+
+//Attempted:
+Objective: find the worst frame, run both algorithm to detect worst and best frames in parallel and compare results
+
+subratct fr(n) from fr(n-1)
+-compute mean and std div
+-the highest mean / std div is the worst frame (since consecutive good frames wont be that much different from each other
+this means that their difference would be minimal)
+-comare result with the result from countor counting.
+
+here are the results:
+
+frame 720 # of contours: 1543 mean: 107.107 STDdiv: 51.7164
+frame 721 # of contours: 1557 mean: 10.589 STDdiv: 21.2054
+frame 722 # of contours: 1659 mean: 10.5724 STDdiv: 21.2322     //good
+frame 723 # of contours: 212 mean: 10.6699 STDdiv: 20.1694      //fake motion blur is added to this fram
+frame 724 # of contours: 1442 mean: 10.4136 STDdiv: 20.3576     //good
+frame 725 # of contours: 1862 mean: 5.58842 STDdiv: 14.2062     //worst
+frame 726 # of contours: 1741 mean: 13.3808 STDdiv: 25.091
+frame 727 # of contours: 1640 mean: 10.9518 STDdiv: 21.7349
+frame 728 # of contours: 2017 mean: 5.27885 STDdiv: 13.9512     //worst
+frame 729 # of contours: 1993 mean: 12.9161 STDdiv: 24.6727
+frame 730 # of contours: 1711 mean: 10.5785 STDdiv: 21.5917     //ok
+
+
+frame 175 # of contours: 2139 mean: 103.648 STDdiv: 52.2474
+frame 176 # of contours: 2097 mean: 3.72111 STDdiv: 9.84544     //good
+frame 177 # of contours: 2181 mean: 3.83103 STDdiv: 10.4603
+frame 178 # of contours: 2185 mean: 6.72734 STDdiv: 17.0688     //good
+frame 179 # of contours: 2128 mean: 1.0092 STDdiv: 4.16677      //good
+frame 180 # of contours: 2252 mean: 6.39944 STDdiv: 17.1274     //halve bad
+frame 181 # of contours: 2741 mean: 5.12643 STDdiv: 13.6313     //worst
+frame 182 # of contours: 2816 mean: 4.24444 STDdiv: 13.0369     //worst
+frame 183 # of contours: 2591 mean: 10.1657 STDdiv: 22.6364     //ok
+frame 184 # of contours: 2359 mean: 1.12543 STDdiv: 4.76311
+best frame: 182
+
+
+
+
+Todo:
+- investigate sbtract() instead of -
+- normalize after subtract or absolute of diff
+- countcontour on diff 
+
+
+- take edge map or (or take gradiant then threshold)
+- difference of edge map
+- contour cnt (higher count of diff means worst frame)
+
+(if frame n is bad then frame n+1 is also bad if it shows low contour cnt for diff!!)
+
+
+- plot the contour cnt over 200 frames (gaussian dist) use matlab!!
+
+
+
+
+
+
+
+
+
+
+*/
 
